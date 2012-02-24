@@ -3,6 +3,7 @@ import org.codehaus.groovy.grails.plugins.json.api.Api
 import org.codehaus.groovy.grails.plugins.web.taglib.ApplicationTagLib
 import grails.converters.JSON
 import org.codehaus.groovy.grails.web.metaclass.BindDynamicMethod
+import java.sql.Timestamp
 
 class JsonApiGrailsPlugin {
 
@@ -43,6 +44,12 @@ class JsonApiGrailsPlugin {
 
     def onChange = { event ->
 
+    }
+
+    def doWithApplicationContext = {
+        JSON.registerObjectMarshaller(Enum) { it?.name() }
+        JSON.registerObjectMarshaller(Date) { it?.format("yyyy-MM-dd'T'HH:mm:ssZ") }
+        JSON.registerObjectMarshaller(Timestamp) { it?.format("yyyy-MM-dd'T'HH:mm:ssZ") }
     }
 
     def doWithDynamicMethods = { ctx ->
