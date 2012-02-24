@@ -32,12 +32,11 @@ class JsonApiGrailsPlugin {
 
     // =============================================================================================
 
-    static EXCLUDED_FIELDS = "excludedFields"
-    static NESTED_FIELDS = "nestedFields"
+    static EXCLUDES = "excludes"
+    static INCLUDES = "includes"
     static API_CONFIG = "apiConfig"
     static IDENTITY = "id"
     static CLASS_NAME = "className"
-    static CUSTOM_FIELDS = "customFields"
     static DEFAULT_CONFIG = "default"
 
     def watchedResources = "file:./grails-app/domain/**/*.groovy"
@@ -101,18 +100,14 @@ class JsonApiGrailsPlugin {
             simplesFields << IDENTITY
 
             // Removes Excluded fields
-            simplesFields = simplesFields - apiConfig[EXCLUDED_FIELDS]
+            simplesFields = simplesFields - apiConfig[EXCLUDES]
 
-            // Get nested fields
-            def nestedFields = apiConfig[NESTED_FIELDS] ?: []
-
-            // Get customs fields
-            def customsFields = apiConfig[CUSTOM_FIELDS] ?: [:]
+            // Add Included fields
+            def nestedFields = apiConfig[INCLUDES] ?: []
 
             // Clean apiConfig
-            apiConfig.remove EXCLUDED_FIELDS
-            apiConfig.remove NESTED_FIELDS
-            apiConfig.remove CUSTOM_FIELDS
+            apiConfig.remove EXCLUDES
+            apiConfig.remove INCLUDES
 
             // Add default empty config
             apiConfig[DEFAULT_CONFIG] = []
@@ -128,12 +123,7 @@ class JsonApiGrailsPlugin {
                 def oneToOne = []
                 def oneToMany = []
 
-                configs[k] = [
-                        simples: simples,
-                        oneToOne: oneToOne,
-                        oneToMany: oneToMany,
-                        customs: customsFields
-                ]
+                configs[k] = [simples: simples, oneToOne: oneToOne, oneToMany: oneToMany]
 
                 allFields.each { publicField ->
                     def property = grailsClass.getPropertyByName(publicField)
@@ -155,7 +145,6 @@ class JsonApiGrailsPlugin {
                 def simples = publicFields.simples ?: []
                 def oneToOne = publicFields.oneToOne ?: []
                 def oneToMany = publicFields.oneToMany ?: []
-                def customs = publicFields.customs ?: [:]
 
                 def rootDelegate = delegate
 
@@ -163,11 +152,6 @@ class JsonApiGrailsPlugin {
 
                 // Add explicitly className
                 result[CLASS_NAME] = grailsClass.name
-
-                // Add customs fields which are closures
-                customs.each { k, closure ->
-                    result[k] = closure.call(rootDelegate)
-                }
 
                 oneToOne.each { publicField ->
                     result[publicField] = rootDelegate.getProperty(publicField)?.asMap(key)
