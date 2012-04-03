@@ -92,7 +92,7 @@ class Api {
 
             } else {
 
-                domainObject.bindData(args[(PARAMS)])
+                domainObject.properties = args[(PARAMS)]
 
                 // Check constraints before saving
                 if ( domainObject.validate() ) {

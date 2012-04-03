@@ -36,15 +36,9 @@ class JsonApiGrailsPlugin {
     static EXCLUDES = "excludes"
     static INCLUDES = "includes"
     static API_CONFIG = "apiConfig"
-    static IDENTITY = "id"
+    static ID = "id"
     static CLASS_NAME = "className"
     static DEFAULT_CONFIG = "default"
-
-    def watchedResources = "file:./grails-app/domain/**/*.groovy"
-
-    def onChange = { event ->
-
-    }
 
     def doWithApplicationContext = {
         JSON.registerObjectMarshaller(Enum) { it?.name() }
@@ -62,35 +56,6 @@ class JsonApiGrailsPlugin {
             def mc = grailsClass.clazz.metaClass
 
             // -----------------------------------------
-            // .bindData()
-            // -----------------------------------------
-            def bind = new BindDynamicMethod()
-
-            mc.bindData = { Object args ->
-                bind.invoke(delegate, "bindData", [delegate, args] as Object[])
-            }
-
-            mc.bindData = {  Object args, List disallowed ->
-                bind.invoke(delegate, "bindData", [delegate, args, [exclude: disallowed]] as Object[])
-            }
-
-            mc.bindData = { Object args, List disallowed, String filter ->
-                bind.invoke(delegate, "bindData", [delegate, args, [exclude: disallowed], filter] as Object[])
-            }
-
-            mc.bindData = { Object args, Map includeExclude ->
-                bind.invoke(delegate, "bindData", [delegate, args, includeExclude] as Object[])
-            }
-
-            mc.bindData = { Object args, Map includeExclude, String filter ->
-                bind.invoke(delegate, "bindData", [delegate, args, includeExclude, filter] as Object[])
-            }
-
-            mc.bindData = { Object args, String filter ->
-                bind.invoke(delegate, "bindData", [delegate, args, filter] as Object[])
-            }
-
-            // -----------------------------------------
             // .asMap()
             // .asMap(String key)
             //
@@ -104,7 +69,7 @@ class JsonApiGrailsPlugin {
             }.collect {it.name}
 
             // Add explicitly 'id' field
-            simplesFields << IDENTITY
+            simplesFields << ID
 
             // Removes Excluded fields
             simplesFields = simplesFields - apiConfig[EXCLUDES]
