@@ -1,5 +1,9 @@
 import org.codehaus.groovy.grails.commons.ClassPropertyFetcher
-import org.codehaus.groovy.grails.plugins.json.api.Crud
+import org.codehaus.groovy.grails.plugins.json.api.Api
+import org.codehaus.groovy.grails.plugins.web.taglib.ApplicationTagLib
+import grails.converters.JSON
+import org.codehaus.groovy.grails.web.metaclass.BindDynamicMethod
+import java.sql.Timestamp
 
 class JsonApiGrailsPlugin {
 
@@ -14,7 +18,7 @@ class JsonApiGrailsPlugin {
     def author = "Mathieu Perez, Julie Ingignoli"
     def authorEmail = "mathieu.perez@novacodex.net, julie.ingignoli@novacodex.net"
     def description = '''\
-        Add Crud operations on Grails Domain Classes and exposition method  in JSON
+        Add Api operations on Grails Domain Classes and exposition method  in JSON
         '''
 
     def documentation = "http://grails.org/plugin/json-api"
@@ -27,11 +31,24 @@ class JsonApiGrailsPlugin {
             [name: 'Mathieu Perez', email: 'mathieu.perez@novacodex.net'],
             [name: 'Julie Ingignoli', email: 'julie.ingignoli@novacodex.net']]
 
+    // =============================================================================================
+
+    static EXCLUDES = "excludes"
+    static INCLUDES = "includes"
+    static API_CONFIG = "apiConfig"
+    static ID = "id"
+    static CLASS_NAME = "className"
+    static DEFAULT_CONFIG = "default"
+
+    def doWithApplicationContext = {
+        JSON.registerObjectMarshaller(Enum) { it?.name() }
+        JSON.registerObjectMarshaller(Date) { it?.format("yyyy-MM-dd'T'HH:mm:ssZ") }
+        JSON.registerObjectMarshaller(Timestamp) { it?.format("yyyy-MM-dd'T'HH:mm:ssZ") }
+    }
 
     def doWithDynamicMethods = { ctx ->
 
-
-        def publicMapDefaultKey = "__"
+        def g = application.mainContext.getBean(ApplicationTagLib)
 
         application.domainClasses.each { grailsClass ->
 
@@ -39,38 +56,46 @@ class JsonApiGrailsPlugin {
             def mc = grailsClass.clazz.metaClass
 
             // -----------------------------------------
-            // .asPublicMap()
-            // .asPublicMap(String key)
+            // .asMap()
+            // .asMap(String key)
+            //
+            // .asJSON()
+            // .asJSON(String key)
             // -----------------------------------------
-            def searchBarToken = ClassPropertyFetcher.forClass(clazz).getStaticPropertyValue("searchBarToken", Closure)
-
-            def publicFieldsAsMap = ClassPropertyFetcher.forClass(clazz).getStaticPropertyValue("publicFields", Map) ?: [:]
+            def apiConfig = ClassPropertyFetcher.forClass(clazz).getStaticPropertyValue(API_CONFIG, Map) ?: [:]
 
             def simplesFields = grailsClass.persistentProperties.findAll { property ->
                 !(property.isManyToOne() || property.isOneToOne() || property.isOneToMany() || property.isManyToMany())
-            }.collect {it.name} + ["id"]
+            }.collect {it.name}
 
+            // Add explicitly 'id' field
+            simplesFields << ID
 
-            //Excluded fields
-            simplesFields = simplesFields - publicFieldsAsMap["excludedFields"]
+            // Removes Excluded fields
+            simplesFields = simplesFields - apiConfig[EXCLUDES]
 
-            publicFieldsAsMap.remove("excludedFields")
+            // Add Included fields
+            def nestedFields = apiConfig[INCLUDES] ?: []
 
-            //Included fields
-            def includedFields = publicFieldsAsMap["includedFields"] ?: []
+            // Clean apiConfig
+            apiConfig.remove EXCLUDES
+            apiConfig.remove INCLUDES
 
-            publicFieldsAsMap[publicMapDefaultKey] = []
+            // Add default empty config
+            apiConfig[DEFAULT_CONFIG] = []
 
-            def tt = [:]
+            // Prepare configs
+            def configs = [:]
 
-            publicFieldsAsMap.each {k, publicFields ->
-                def allFields = publicFields + includedFields
+            apiConfig.each {k, publicFields ->
+
+                def allFields = publicFields + nestedFields
 
                 def simples = simplesFields
                 def oneToOne = []
                 def oneToMany = []
 
-                tt[k] = [simples: simples, oneToOne: oneToOne, oneToMany: oneToMany]
+                configs[k] = [simples: simples, oneToOne: oneToOne, oneToMany: oneToMany]
 
                 allFields.each { publicField ->
                     def property = grailsClass.getPropertyByName(publicField)
@@ -85,9 +110,9 @@ class JsonApiGrailsPlugin {
                 }
             }
 
-            mc.asPublicMap = { String key = publicMapDefaultKey ->
+            mc.asMap = { String key = DEFAULT_CONFIG ->
 
-                def publicFields = tt[key] ?: tt[publicMapDefaultKey]
+                def publicFields = configs[key] ?: configs[DEFAULT_CONFIG]
 
                 def simples = publicFields.simples ?: []
                 def oneToOne = publicFields.oneToOne ?: []
@@ -97,18 +122,15 @@ class JsonApiGrailsPlugin {
 
                 def result = simples.collectEntries {[(it): rootDelegate.getProperty(it)]}
 
-                result["className"] = grailsClass.name
-
-                if ( searchBarToken ) {
-                    result["searchBarToken"] = searchBarToken.call(rootDelegate)
-                }
+                // Add explicitly className
+                result[CLASS_NAME] = grailsClass.name
 
                 oneToOne.each { publicField ->
-                    result[publicField] = rootDelegate.getProperty(publicField)?.asPublicMap(key)
+                    result[publicField] = rootDelegate.getProperty(publicField)?.asMap(key)
                 }
 
                 oneToMany.each { publicField ->
-                    result[publicField] = rootDelegate.getProperty(publicField)?.collect { it.asPublicMap(key) }
+                    result[publicField] = rootDelegate.getProperty(publicField)?.collect { it.asMap(key) }
                 }
 
                 if ( rootDelegate.hasErrors() ) {
@@ -123,48 +145,16 @@ class JsonApiGrailsPlugin {
                 result
             }
 
-
-            // -----------------------------------------
-            // .crud()
-            // -----------------------------------------
-
-            def crud = new Crud(domainClass: clazz)
-
-            grailsClass.metaClass.static.crud = {
-                crud
+            mc.asJSON = {String key = DEFAULT_CONFIG ->
+                delegate.asMap(key) as JSON
             }
 
             // -----------------------------------------
-            // .saveWithParams()
+            // .api()
             // -----------------------------------------
-            grailsClass.metaClass.static.saveWithParams = { id, params ->
-
-                def command
-
-                if ( id ) {
-
-                    command = clazz.get(id)
-
-                    if ( !command ) {
-                        return null
-                    }
-
-                } else {
-                    command = clazz.newInstance()
-                }
-
-                command.bindData(params)
-
-                // Check constraints before saving
-                if ( command.validate() ) {
-                    command.save(flush: true)
-                }
-
-                command
+            mc.static.api = {
+                new Api(domainClass: clazz)
             }
-
         }
-
     }
-
 }

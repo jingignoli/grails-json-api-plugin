@@ -1,33 +1,56 @@
 package org.codehaus.groovy.grails.plugins.json.api
 
-
-import grails.converters.JSON
 import javax.servlet.http.HttpServletResponse
 import org.apache.commons.logging.LogFactory
 
-class Crud {
+class Api {
 
     private static final log = LogFactory.getLog(this)
 
     Class domainClass
 
-
     static BEFORE = "before"
     static AFTER = "after"
     static ID = "id"
-    static PUBLIC_MAP = "publicMap"
+    static CONFIG = "config"
     static PARAMS = "params"
+    static MAX = "max"
+    static OFFSET = "offset"
+
+    def get(args = [(ID): null, (CONFIG): null]) {
+
+        try {
+
+            def domainObject = args[ID] ? domainClass.get(args[ID]) : domainClass.newInstance()
+
+            if ( !domainObject ) {
+
+                return [status: HttpServletResponse.SC_NOT_FOUND]
+
+            } else {
+
+                return [status: HttpServletResponse.SC_OK, text: domainObject.asJSON(args[CONFIG])]
+            }
+
+        } catch (Exception ex) {
+            log.error "Error while getting ${domainClass} with id=[${args[ID]}]", ex
+            [status: HttpServletResponse.SC_INTERNAL_SERVER_ERROR]
+        }
+
+    }
+
+    def list(args = [(MAX): 10, (OFFSET): 0, (CONFIG): null]) {
+        domainClass.findAll(args.subMap([MAX, OFFSET]))*.asJSON(args[CONFIG])
+    }
 
     /**
      *
-
      * @return a map with the status:
      * - 400 if id not given,
      * - 404 if entity not found,
      * - 500 if error occured while deleting,
      * - 204 if success
      */
-
     def delete(args = [(ID): null, (BEFORE): null, (AFTER): null]) {
 
         if ( !args[ID] ) {
@@ -57,7 +80,7 @@ class Crud {
         }
     }
 
-    def save(args = [(ID): null, (PARAMS): null, (BEFORE): null, (AFTER): null, (PUBLIC_MAP): null]) {
+    def save(args = [(ID): null, (PARAMS): null, (BEFORE): null, (AFTER): null, (CONFIG): null]) {
 
         try {
 
@@ -69,7 +92,7 @@ class Crud {
 
             } else {
 
-                domainObject.bindData(args[(PARAMS)])
+                domainObject.properties = args[(PARAMS)]
 
                 // Check constraints before saving
                 if ( domainObject.validate() ) {
@@ -80,8 +103,7 @@ class Crud {
 
                     args[AFTER]?.call(domainObject)
 
-                    return [status: HttpServletResponse.SC_OK, text: domainObject.asPublicMap(args[PUBLIC_MAP]) as
-                    JSON]
+                    return [status: HttpServletResponse.SC_OK, text: domainObject.asJSON(args[CONFIG])]
 
                 } else {
 
@@ -91,8 +113,7 @@ class Crud {
                         log.error it
                     }
 
-                    return [status: HttpServletResponse.SC_BAD_REQUEST, text: domainObject.asPublicMap(args[PUBLIC_MAP]) as
-                    JSON]
+                    return [status: HttpServletResponse.SC_BAD_REQUEST, text: domainObject.asJSON(args[CONFIG])]
                 }
             }
 
